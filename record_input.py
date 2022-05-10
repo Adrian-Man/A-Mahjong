@@ -4,7 +4,7 @@ import time
 
 class input_record:
     #new game setup
-    def __init__(self,initEast,initSouth,initWest,initNorth):
+    def __init__(self,initEast,initSouth,initWest,initNorth,currRound,currHand): #create a record
         self.data = {
                         'round':[], #圈
                         'hand':[], #局
@@ -37,26 +37,20 @@ class input_record:
         self.players = [initEast,initSouth,initWest,initNorth]
         self.pos ={'currEast':initEast,'currSouth':initSouth,'currWest':initWest,'currNorth':initNorth}
         self.score = {initEast:0,initSouth:0,initWest:0,initNorth:0} #player scoreboard
-        self.currRound = 1
-        self.currHand = 0
+        self.currRound = int(currRound)
+        self.currHand = int(currHand)
         self.currContDealer = 0
         self.scoreList = {3:8,4:16,5:24,6:32,7:48,8:64,9:96,10:128}
         self.inProgress = True
         self.df = pd.DataFrame(self.data)
         self.date = time.localtime(time.time())
-        self.file = 'records/'+str(self.date.tm_year)+str(self.date.tm_mon)+str(self.date.tm_mday)+str(self.date.tm_hour)+str(self.date.tm_min)+'.csv'
+        self.file = 'records/'+str(self.date.tm_year)+str(self.date.tm_mon)+str(self.date.tm_mday)+str(self.date.tm_hour)+str(self.date.tm_min)+'.csv' #create file
                 
     def pre_game(self,**args):
         if args['replace']=='y': #change player info
             for player in self.players:
                 if player not in self.score.keys():
                     self.score[player] = 0
-
-        if self.currContDealer==0: #if the dealer did not win
-            self.currHand += 1
-            if self.currHand>4: #if one round ended
-                self.currHand = self.currHand%4+1
-                self.currRound += 1
 
         self.pos['currEast'] = self.players[((self.currHand-1)%4)] #calculate current position
         self.pos['currSouth'] = self.players[((self.currHand)%4)]
@@ -77,10 +71,10 @@ class input_record:
         self.data['north'].append(self.pos['currNorth'])
         self.data['time'].append(self.get_time())
         self.data['dice'].append(args['dice'])
-        self.data['eastFlower'].append(args['flowers'][0])
-        self.data['southFlower'].append(args['flowers'][1])
-        self.data['westFlower'].append(args['flowers'][2])
-        self.data['northFlower'].append(args['flowers'][3])
+        self.data['eastFlower'].append(int(args['flowers'][0]))
+        self.data['southFlower'].append(int(args['flowers'][1]))
+        self.data['westFlower'].append(int(args['flowers'][2]))
+        self.data['northFlower'].append(int(args['flowers'][3]))
 
     def post_game(self,**args):
         self.data['winner'].append(args['winner'])
@@ -88,8 +82,8 @@ class input_record:
             self.currContDealer += 1
         else:
             self.currContDealer = 0
-        self.data['points'].append(args['points']) # update data
-        if args['loser']=='none':
+        self.data['points'].append(args['points'])
+        if args['loser']=='none': #find the loser
             self.data['loserPos'].append(args['loser'])
         else:
             self.data['loserPos'].append(self.inverse_dict(self.pos)[args['loser']][4:])
@@ -98,13 +92,18 @@ class input_record:
 
         if args['winner']!='none': #update scores
             if args['selfDrawn']==True:
-                temPlayers = self.players.copy()
-                winner = args['winner']
-                temPlayers.remove(winner)
-                self.score[winner] += 1.5*self.scoreList[args['points']]
-                for loser in temPlayers:
-                    self.score[loser] -= 0.5*self.scoreList[args['points']]
-            else:
+                if args['loser']=='none': #self drawn
+                    temPlayers = self.players.copy()
+                    winner = args['winner']
+                    temPlayers.remove(winner)
+                    self.score[winner] += 1.5*self.scoreList[args['points']]
+                    for loser in temPlayers:
+                        self.score[loser] -= 0.5*self.scoreList[args['points']]
+                else: #someone responsible for the self drawn
+                    winner = args['winner']
+                    self.score[winner] += 1.5*self.scoreList[args['points']]
+                    self.score[args['loser']] -= 1.5*self.scoreList[args['points']]
+            else: #someone wins
                 self.score[args['winner']] += self.scoreList[args['points']]
                 self.score[args['loser']] -= self.scoreList[args['points']]
 
@@ -113,8 +112,14 @@ class input_record:
         self.data['westScore'].append(self.score[self.pos['currWest']])
         self.data['northScore'].append(self.score[self.pos['currNorth']])
 
-        if self.currRound==4 and self.currHand==4:
+        if self.currRound==4 and self.currHand==4: #game ended
             self.inProgress = False
+
+        if self.currContDealer==0: #if the dealer did not win
+            self.currHand += 1
+            if self.currHand>4: #one round ended
+                self.currHand = 1
+                self.currRound += 1
 
     def get_time(self):
         now = time.time()
@@ -133,19 +138,48 @@ class input_record:
             replace = input("Is there any change of player? 'y' for yes, 'n' for no: ")
             if replace=='y': #change player info
                 players = input('Please enter the four players in the order of "Init East","Init South","Init West","Init North": ')
-                self.players = players.split(',')
-            dice = int(input("Please enter the sum of the three dice: "))
+                while True:
+                    try:
+                        self.players = players.split(',')
+                        t = players[0]
+                        t = players[1]
+                        t = players[2]
+                        t = players[3]
+                        break
+                    except:
+                        players = input('Please enter the four players in the order of "Init East","Init South","Init West","Init North": ')
+            dice = input("Please enter the sum of the three dice: ")
+            while True:
+                try:
+                    dice = int(dice)
+                    break
+                except:
+                    dice = input("Please enter the sum of the three dice: ")
             flowers = input("Please enter the number of flowers for each player in the order of 'east','south','west','north': ")
-            flowers = flowers.split(',')
+            while True:
+                try:
+                    flowers = flowers.split(',')
+                    t = flowers[0]
+                    t = flowers[1]
+                    t = flowers[2]
+                    t = flowers[3]
+                    break
+                except:
+                    flowers = input("Please enter the number of flowers for each player in the order of 'east','south','west','north': ")
             self.pre_game(replace=replace,dice=dice,flowers=flowers)
             winner = input("Who is the winner? Type 'none' if no one wins: ")
-            points = int(input("What is the point for the winner? Type 0 if no one wins: "))
-            loser = input("Who is the loser? type 'none if no one lose or someone seld-drawn: ")
-            selfDrawn = input("Is it a self-drawn? 'y' for yes, 'n' for no: ")
-            if selfDrawn=='y':
-                selfDrawn = True
-            elif selfDrawn=='n':
+            if winner=='none':
+                points = 0
+                loser = 'none'
                 selfDrawn = False
+            else:
+                points = int(input("What is the point for the winner? "))
+                selfDrawn = input("Is it a self-drawn? 'y' for yes, 'n' for no: ")
+                if selfDrawn=='y':
+                    selfDrawn = True
+                elif selfDrawn=='n':
+                    selfDrawn = False
+                loser = input("Who is the loser? type 'none' if no one lose or someone seld-drawn: ")
             self.post_game(winner=winner,points=points,loser=loser,selfDrawn=selfDrawn)
             complete = input('Is the game ended? "y" for yes, "n" for no: ')
             self.complete()
@@ -158,6 +192,24 @@ class input_record:
 
 if __name__=='__main__':
     players = input('Please enter the four players in the order of "Init East","Init South","Init West","Init North": ')
-    players = players.split(',')
-    record = input_record(players[0],players[1],players[2],players[3])
+    while True:
+        try:
+            players = players.split(',')
+            t = players[0]
+            t = players[1]
+            t = players[2]
+            t = players[3]
+            break
+        except:
+            players = input('Please enter the four players in the order of "Init East","Init South","Init West","Init North": ')
+    gameIndex = input('Please enter the initial round and hand in the order of "Round","Hand": ')
+    while True:
+        try:
+            gameIndex = gameIndex.split(',')
+            t = gameIndex[0]
+            t = gameIndex[1]
+            break
+        except:
+            gameIndex = input('Please enter the initial round and hand in the order of "Round","Hand": ')
+    record = input_record(players[0],players[1],players[2],players[3],gameIndex[0],gameIndex[1])
     record.manual()
